@@ -47,7 +47,7 @@ impl YamlValue {
             YamlValue::Entries(e) => {
                 let s = e
                     .iter()
-                    .map(|entry| entry.to_indented_string(indent + 1))
+                    .map(|entry| entry.to_indented_string(indent))
                     .collect::<Vec<String>>()
                     .join("\n");
                 format!("\n{}", s)
@@ -125,10 +125,12 @@ fn count_indents(line: &str) -> IndentSize {
 
 //pub fn parse(text: &str) -> Result<Vec<UnityObject>, &'static str> {
 pub fn parse(text: &'static str) -> Vec<UnityObject> {
+    println!("TODO: add proper error handling to the parser"); // TODO
+
     let mut objs = vec![];
     let mut lines = text
         .lines()
-        .skip_while(|line| line.starts_with('%'))
+        .skip_while(|line| line.starts_with('%') || line.trim().is_empty())
         .peekable();
 
     let mut current_object = UnityObject {
@@ -138,6 +140,10 @@ pub fn parse(text: &'static str) -> Vec<UnityObject> {
         entries: vec![],
     };
     while let Some(line) = lines.peek() {
+        if line.trim().is_empty() {
+            lines.next();
+            continue;
+        }
         if line.starts_with("--- ") {
             let obj_exists = !current_object.id.is_empty();
             if obj_exists {
@@ -167,7 +173,6 @@ pub fn parse(text: &'static str) -> Vec<UnityObject> {
         current_object
             .entries
             .append(&mut parse_single(&mut lines, indents));
-        lines.next();
     }
     let obj_exists = !current_object.id.is_empty();
     if obj_exists {
@@ -180,29 +185,95 @@ fn parse_single<'a, T>(iterator: &mut Peekable<T>, indents: IndentSize) -> Vec<Y
 where
     T: Iterator<Item = &'a str>,
 {
+    let (next, values) = parse_single_inner(iterator, indents);
+    if next {
+        iterator.next();
+    }
+    values
+}
+
+fn parse_single_inner<'a, T>(
+    iterator: &mut Peekable<T>,
+    indents: IndentSize,
+) -> (bool, Vec<YamlEntry>)
+where
+    T: Iterator<Item = &'a str>,
+{
+    let mut next = true;
     let line = iterator.peek().unwrap();
     let mut entries = vec![];
 
     let parts = line.split_once(':').unwrap();
-    let key = parts.0.chars().skip((2 * indents).into()).collect();
+    let key = parts.0[(2 * indents).into()..].to_owned();
 
     // value might need to be an empty string. in that case, pass a space, and later change it back to empty
-    let value = if parts.1 == " " {
+    let mut value = if parts.1 == " " {
         parts.1
     } else {
         parts.1.trim_start()
     };
+    if value.starts_with("- ") {
+        value = &value[2..];
+    }
 
     match value {
-        // "" => todo!("Entries or Array"),
+        "" => {
+            iterator.next();
+            let mut line = iterator.peek().unwrap();
+            let mut line_indents = count_indents(line);
+            // definitely an entry
+            if line_indents == indents + 1 {
+                let mut values = vec![];
+                while line_indents > indents {
+                    values.append(&mut parse_single_inner(iterator, indents + 1).1);
+                    iterator.next();
+                    line = iterator.peek().unwrap();
+                    line_indents = count_indents(line);
+                }
+
+                entries.push(YamlEntry {
+                    key,
+                    value: YamlValue::Entries(values),
+                });
+                next = false;
+            // definitely an array
+            } else if line_indents == indents && line.trim_start().starts_with('-') {
+                let mut values = vec![];
+                while line.trim_start().starts_with('-') {
+                    values.append(&mut parse_single_inner(iterator, indents + 1).1);
+                    iterator.next();
+                    line = iterator.peek().unwrap();
+                }
+
+                entries.push(YamlEntry {
+                    key,
+                    value: YamlValue::Array(values),
+                });
+                next = false;
+            // most likely an empty string
+            } else if line_indents == indents {
+                entries.push(YamlEntry {
+                    key,
+                    value: YamlValue::Str(String::new()),
+                })
+            } else {
+                panic!("Not sure what the structure is. Line: \n{}", line)
+            }
+        }
         s if s.starts_with('{') => {
-            let l = s.strip_prefix('{').unwrap().strip_suffix('}').unwrap();
+            let mut l = s.strip_prefix('{').unwrap().to_owned();
+            while !l.ends_with('}') {
+                iterator.next();
+                let line = iterator.peek().unwrap();
+                l += (" ".to_owned() + &line.trim_start().to_owned()).as_str();
+            }
+            l = l.strip_suffix('}').unwrap().to_owned();
             let value = YamlValue::Object(
                 l.split(", ")
-                    .flat_map(|kvp| parse_single(&mut kvp.lines().peekable(), 0))
+                    .flat_map(|kvp| parse_single_inner(&mut kvp.lines().peekable(), 0).1)
                     .collect(),
             );
-            entries.push(YamlEntry { key, value })
+            entries.push(YamlEntry { key, value });
         }
         s => {
             let value = if let Ok(i) = s.parse::<i64>() {
@@ -222,5 +293,5 @@ where
             entries.push(YamlEntry { key, value });
         }
     }
-    entries
+    (next, entries)
 }
