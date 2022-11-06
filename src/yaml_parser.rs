@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 type IndentSize = u8;
 type ClassId = u32;
 
@@ -86,6 +88,23 @@ impl YamlEntry {
     }
 }
 
+impl Display for UnityObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "--- !u!{} &{}\n{}:\n{}",
+            self.class_id,
+            self.id,
+            self.object_type_name,
+            self.entries
+                .iter()
+                .map(|e| e.to_string(1))
+                .collect::<Vec<String>>()
+                .join("\n")
+        )
+    }
+}
+
 fn count_indents(line: &str) -> IndentSize {
     ((line.len() - line.trim_start().len()) / 2)
         .try_into()
@@ -132,7 +151,14 @@ pub fn parse(text: &str) -> Vec<UnityObject> {
         let parts = line.split_once(':').unwrap();
         let key: String = parts.0.chars().skip((2 * indents).into()).collect();
 
-        match parts.1.trim_start() {
+        // value might need to be an empty string. in that case, pass a space, and later change it back to empty
+        let value = if parts.1 == " " {
+            parts.1
+        } else {
+            parts.1.trim_start()
+        };
+
+        match value {
             "" => todo!("Entries or Array"),
             s if s.starts_with(" {") => todo!("Object"),
             s => {
@@ -140,6 +166,8 @@ pub fn parse(text: &str) -> Vec<UnityObject> {
                     YamlValue::Int(i)
                 } else if let Ok(f) = s.parse::<f64>() {
                     YamlValue::Float(f)
+                } else if s == " " {
+                    YamlValue::Str(String::new())
                 } else {
                     YamlValue::Str(s.to_owned())
                 };

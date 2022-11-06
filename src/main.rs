@@ -31,12 +31,13 @@ RenderSettings:
   m_Fog: 0
   m_FogColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   m_FogMode: 3
+  m_Components: 
   m_Component:
   - component: {fileID: 47246278}
   - component: {fileID: 47246277}
   - component: {fileID: 47246276}";
     for uo in yaml_parser::parse(s) {
-        println!("{:?}", uo);
+        println!("{}", uo);
     }
 }
 
