@@ -1,6 +1,8 @@
 use std::process::exit;
 
 mod args_parser;
+mod class_id;
+mod unity;
 mod yaml_parser;
 
 fn main() {
@@ -36,9 +38,11 @@ RenderSettings:
   - component: {fileID: 47246278}
   - component: {fileID: 47246277}
   - component: {fileID: 47246276}";
-    for uo in yaml_parser::parse(s) {
-        println!("{}", uo);
-    }
+    let uos = yaml_parser::parse(s);
+    // for uo in uos {
+    //     println!("{}", uo);
+    // }
+    println!("{}", uos[1].entries[3]);
 }
 
 fn print_usage() {
