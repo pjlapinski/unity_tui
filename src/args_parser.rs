@@ -2,6 +2,7 @@ use std::{env, path::PathBuf};
 
 pub enum ArgsError {
     TooFew,
+    NotDir,
 }
 
 pub fn parse() -> Result<PathBuf, ArgsError> {
@@ -11,5 +12,10 @@ pub fn parse() -> Result<PathBuf, ArgsError> {
         None => return Err(ArgsError::TooFew),
         Some(p) => p,
     };
-    Ok(PathBuf::from(path))
+    let path = PathBuf::from(path);
+    if !path.is_dir() {
+        Err(ArgsError::NotDir)
+    } else {
+        Ok(PathBuf::from(path))
+    }
 }

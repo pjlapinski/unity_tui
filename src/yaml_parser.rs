@@ -133,7 +133,7 @@ fn count_indents(line: &str) -> IndentSize {
         .unwrap()
 }
 
-//pub fn parse(text: &str) -> Result<Vec<UnityObject>, &'static str> {
+//pub fn parse(text: &str) -> Result<Vec<UnityObject>, String> {
 pub fn parse(text: &'static str) -> Vec<UnityObject> {
     let mut objs = vec![];
     let mut lines = text
