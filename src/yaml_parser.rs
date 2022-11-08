@@ -13,7 +13,7 @@ pub enum YamlValue {
     Str(String),
     Entries(Vec<YamlEntry>),
     Object(Vec<YamlEntry>),
-    Array(Vec<YamlEntry>),
+    Array(Vec<Vec<YamlEntry>>),
 }
 
 #[derive(Debug, Clone)]
@@ -55,7 +55,17 @@ impl YamlValue {
             YamlValue::Array(a) => {
                 let s = a
                     .iter()
-                    .map(|entry| entry.to_array_string(indent))
+                    .map(|entries| {
+                        let mut it = entries.iter();
+                        let mut strings = vec![];
+                        if let Some(entry) = it.next() {
+                            strings.push(entry.to_array_string(indent));
+                        }
+                        while let Some(entry) = it.next() {
+                            strings.push(entry.to_indented_string(indent + 1));
+                        }
+                        strings.join("\n")
+                    })
                     .collect::<Vec<String>>()
                     .join("\n");
                 format!("\n{}", s)
@@ -125,8 +135,6 @@ fn count_indents(line: &str) -> IndentSize {
 
 //pub fn parse(text: &str) -> Result<Vec<UnityObject>, &'static str> {
 pub fn parse(text: &'static str) -> Vec<UnityObject> {
-    println!("TODO: add proper error handling to the parser"); // TODO
-
     let mut objs = vec![];
     let mut lines = text
         .lines()
@@ -240,9 +248,19 @@ where
             } else if line_indents == indents && line.trim_start().starts_with('-') {
                 let mut values = vec![];
                 while line.trim_start().starts_with('-') {
-                    values.append(&mut parse_single_inner(iterator, indents + 1).1);
-                    iterator.next();
-                    line = iterator.peek().unwrap();
+                    let mut inner_values = vec![];
+                    loop {
+                        let mut parsed = parse_single_inner(iterator, indents + 1);
+                        inner_values.append(&mut parsed.1);
+                        if parsed.0 {
+                            iterator.next();
+                        }
+                        line = iterator.peek().unwrap();
+                        if count_indents(line) == indents {
+                            break;
+                        }
+                    }
+                    values.push(inner_values);
                 }
 
                 entries.push(YamlEntry {
@@ -251,11 +269,12 @@ where
                 });
                 next = false;
             // most likely an empty string
-            } else if line_indents == indents {
+            } else if line_indents <= indents {
                 entries.push(YamlEntry {
                     key,
                     value: YamlValue::Str(String::new()),
-                })
+                });
+                next = false;
             } else {
                 panic!("Not sure what the structure is. Line: \n{}", line)
             }
