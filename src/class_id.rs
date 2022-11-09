@@ -1,3 +1,4 @@
+use crate::util::hash_map;
 use std::collections::HashMap;
 
 use lazy_static::lazy_static;
@@ -5,7 +6,7 @@ use lazy_static::lazy_static;
 pub type ClassId = u32;
 
 lazy_static! {
-    pub static ref CLASS_IDS: HashMap<ClassId, &'static str> = HashMap::from([
+    pub static ref CLASS_IDS: HashMap<ClassId, &'static str> = hash_map![
         (0, "Object"),
         (1, "GameObject"),
         (2, "Component"),
@@ -319,5 +320,5 @@ lazy_static! {
         (2083778819, "LocalizationAsset"),
         (2089858483, "ScriptedImporter"),
         (2103361453, "ShaderIncludeImporter"),
-    ]);
+    ];
 }

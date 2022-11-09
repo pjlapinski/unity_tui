@@ -1,7 +1,34 @@
+macro_rules! hash_map {
+    [$(($key:expr, $value:expr)),*$(,)?] => {{
+            let mut map = std::collections::HashMap::new();
+            $(
+            map.insert($key, $value);
+            )*
+            map
+        }};
+}
+
+macro_rules! hash_set {
+    [$($value:expr),*$(,)?] => {{
+            let mut map = std::collections::HashSet::new();
+            $(
+            map.insert($value);
+            )*
+            map
+        }};
+}
+
+pub(crate) use hash_set;
+pub(crate) use hash_map;
+
 pub trait ErrToStr<T, U> {
     fn err_to_str(self) -> Result<T, String>;
 }
-impl<T, U> ErrToStr<T, U> for Result<T, U> where U: ToString {
+
+impl<T, U> ErrToStr<T, U> for Result<T, U>
+where
+    U: ToString,
+{
     /// Maps a Result<T, U> to Result<T, String> by calling .to_string on a contained error.
     ///
     /// # Examples
