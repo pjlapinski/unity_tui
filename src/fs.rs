@@ -1,9 +1,6 @@
-use std::ffi::OsStr;
-use std::io::Error;
-use std::path::{PathBuf, StripPrefixError};
 use crate::util::ErrToStr;
+use std::path::PathBuf;
 
-// const EXTENSIONS: [&str; 3] = ["unity", "asset", "prefab"];
 const SCENE_EXTENSION: &str = "unity";
 const ASSET_EXTENSION: &str = "asset";
 const PREFAB_EXTENSION: &str = "prefab";
@@ -47,7 +44,9 @@ pub fn find_project_files(path: &PathBuf) -> Result<ProjectFiles, String> {
 }
 
 pub fn path_to_relative(full: &PathBuf, base: &PathBuf) -> Result<PathBuf, String> {
-    full.strip_prefix(base).map(|p| p.to_path_buf()).err_to_str()
+    full.strip_prefix(base)
+        .map(|p| p.to_path_buf())
+        .err_to_str()
 }
 
 pub fn path_to_absolute(relative: &PathBuf, base: &PathBuf) -> PathBuf {
