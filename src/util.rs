@@ -18,8 +18,8 @@ macro_rules! hash_set {
         }};
 }
 
-pub(crate) use hash_set;
 pub(crate) use hash_map;
+pub(crate) use hash_set;
 
 pub trait ErrToStr<T, U> {
     fn err_to_str(self) -> Result<T, String>;

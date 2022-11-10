@@ -1,4 +1,4 @@
-use crate::class_id::ClassId;
+use crate::{class_id::ClassId, fs::FileLines};
 use std::{fmt::Display, iter::Peekable};
 
 type IndentSize = u8;
@@ -7,7 +7,7 @@ type IndentSize = u8;
 pub enum YamlValue {
     // int could be not needed, but would have to figure out how to do flags then. However,
     // Unity knows to convert a float to an int while deserializing. Tested on an int,
-    // setting it to 1.5 changed to 1 after deserialization. Still not sure aboug flags
+    // setting it to 1.5 changed to 1 after deserialization. Still not sure about flags
     Int(i64),
     Float(f64),
     Str(String),
@@ -61,7 +61,7 @@ impl YamlValue {
                         if let Some(entry) = it.next() {
                             strings.push(entry.to_array_string(indent));
                         }
-                        while let Some(entry) = it.next() {
+                        for entry in it {
                             strings.push(entry.to_indented_string(indent + 1));
                         }
                         strings.join("\n")
@@ -133,11 +133,14 @@ fn count_indents(line: &str) -> IndentSize {
         .unwrap()
 }
 
-//pub fn parse(text: &str) -> Result<Vec<UnityObject>, String> {
-pub fn parse(text: &'static str) -> Vec<UnityObject> {
+//pub fn parse(text: FileLines) -> Result<Vec<UnityObject>, String> { // TODO
+pub fn parse(text: FileLines) -> Vec<UnityObject> {
     let mut objs = vec![];
     let mut lines = text
-        .lines()
+        .map(|line| match line {
+            Ok(line) => line,
+            Err(e) => panic!("{}", e.to_string()),
+        })
         .skip_while(|line| line.starts_with('%') || line.trim().is_empty())
         .peekable();
 
@@ -189,9 +192,9 @@ pub fn parse(text: &'static str) -> Vec<UnityObject> {
     objs
 }
 
-fn parse_single<'a, T>(iterator: &mut Peekable<T>, indents: IndentSize) -> Vec<YamlEntry>
+fn parse_single<T>(iterator: &mut Peekable<T>, indents: IndentSize) -> Vec<YamlEntry>
 where
-    T: Iterator<Item = &'a str>,
+    T: Iterator<Item = String>,
 {
     let (next, values) = parse_single_inner(iterator, indents);
     if next {
@@ -200,12 +203,9 @@ where
     values
 }
 
-fn parse_single_inner<'a, T>(
-    iterator: &mut Peekable<T>,
-    indents: IndentSize,
-) -> (bool, Vec<YamlEntry>)
+fn parse_single_inner<T>(iterator: &mut Peekable<T>, indents: IndentSize) -> (bool, Vec<YamlEntry>)
 where
-    T: Iterator<Item = &'a str>,
+    T: Iterator<Item = String>,
 {
     let mut next = true;
     let line = iterator.peek().unwrap();
@@ -284,12 +284,15 @@ where
             while !l.ends_with('}') {
                 iterator.next();
                 let line = iterator.peek().unwrap();
-                l += (" ".to_owned() + &line.trim_start().to_owned()).as_str();
+                l += (" ".to_owned() + line.trim_start()).as_str();
             }
             l = l.strip_suffix('}').unwrap().to_owned();
             let value = YamlValue::Object(
                 l.split(", ")
-                    .flat_map(|kvp| parse_single_inner(&mut kvp.lines().peekable(), 0).1)
+                    .flat_map(|kvp| {
+                        let kvp = kvp.to_owned();
+                        parse_single_inner(&mut vec![kvp].into_iter().peekable(), 0).1
+                    })
                     .collect(),
             );
             entries.push(YamlEntry { key, value });

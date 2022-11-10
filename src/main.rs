@@ -4,8 +4,8 @@ mod args_parser;
 mod class_id;
 mod fs;
 mod unity;
-mod yaml_parser;
 mod util;
+mod yaml_parser;
 
 fn main() {
     let path = match args_parser::parse() {
@@ -24,8 +24,9 @@ fn main() {
 
     let project = fs::find_project_files(&path).unwrap();
 
-    for path in project.scenes {
-        println!("{:?}", path)
+    let uos = yaml_parser::parse(fs::get_file_lines(project.scenes.last().unwrap()).unwrap());
+    for uo in uos {
+        println!("{}", uo);
     }
 
     todo!("proper error handling")
