@@ -127,22 +127,27 @@ impl Display for UnityObject {
     }
 }
 
-fn count_indents(line: &str) -> IndentSize {
+fn count_indents(line: &String) -> IndentSize {
     ((line.len() - line.trim_start().len()) / 2)
         .try_into()
         .unwrap()
 }
 
-//pub fn parse(text: FileLines) -> Result<Vec<UnityObject>, String> { // TODO
-pub fn parse(text: FileLines) -> Vec<UnityObject> {
+macro_rules! err_on_line {
+    ($line:expr) => {
+        format!("Invalid object format encountered. Line:\n{}", $line)
+    };
+    ($line:expr, $extra:expr) => {
+        format!(
+            "Invalid object format encountered. Line:\n{}\n{}",
+            $line, $extra
+        )
+    };
+}
+
+pub fn parse(text: FileLines) -> Result<Vec<UnityObject>, String> {
     let mut objs = vec![];
-    let mut lines = text
-        .map(|line| match line {
-            Ok(line) => line,
-            Err(e) => panic!("{}", e.to_string()),
-        })
-        .skip_while(|line| line.starts_with('%') || line.trim().is_empty())
-        .peekable();
+    let mut lines = text.peekable();
 
     let mut current_object = UnityObject {
         id: "".to_owned(),
@@ -151,67 +156,114 @@ pub fn parse(text: FileLines) -> Vec<UnityObject> {
         entries: vec![],
     };
     while let Some(line) = lines.peek() {
-        if line.trim().is_empty() {
+        let line = match line {
+            Ok(l) => l,
+            Err(e) => return Err(e.to_string()),
+        };
+
+        if line.starts_with('%') || line.trim().is_empty() {
             lines.next();
             continue;
         }
+
+        // In this format, a comment like this will mean we encountered an object header
         if line.starts_with("--- ") {
             let obj_exists = !current_object.id.is_empty();
             if obj_exists {
                 objs.push(current_object.clone());
             }
+            // format for this header is
+            // --- !u!{class_id} &{id}
             let mut parts = line.split(' ').skip(1);
-            current_object.class_id = parts
-                .next()
-                .unwrap()
-                .strip_prefix("!u!")
-                .unwrap()
-                .parse::<ClassId>()
-                .unwrap();
-            current_object.id = parts.next().unwrap().strip_prefix('&').unwrap().to_owned();
+
+            // class_id
+            match parts.next() {
+                Some(s) => match s.strip_prefix("!u!") {
+                    Some(s) => match s.parse::<ClassId>() {
+                        Ok(class_id) => current_object.class_id = class_id,
+                        Err(e) => return Err(e.to_string()),
+                    },
+                    None => return Err(err_on_line!(line, "Prefix \"!u!\" not found in header.")),
+                },
+                None => return Err(err_on_line!(line, "Empty header.")),
+            }
+            // id
+            match parts.next() {
+                Some(s) => match s.strip_prefix('&') {
+                    Some(id) => current_object.id = id.to_owned(),
+                    None => return Err(err_on_line!(line, "Prefix \"&\" not found in header.")),
+                },
+                None => return Err(err_on_line!(line, "Object id missing from the header.")),
+            }
             current_object.object_type_name = "".to_owned();
             current_object.entries = vec![];
+
             lines.next();
             continue;
         }
         let indents = count_indents(line);
         if indents == 0 {
-            current_object.object_type_name = line.split_once(':').unwrap().0.to_owned();
+            match line.split_once(':') {
+                Some((name, _)) => current_object.object_type_name = name.to_owned(),
+                None => return Err(err_on_line!(line)),
+            }
             current_object.entries = vec![];
             lines.next();
             continue;
         }
         current_object
             .entries
-            .append(&mut parse_single(&mut lines, indents));
+            .append(&mut parse_single(&mut lines, indents)?);
     }
     let obj_exists = !current_object.id.is_empty();
     if obj_exists {
         objs.push(current_object);
     }
-    objs
+    Ok(objs)
 }
 
-fn parse_single<T>(iterator: &mut Peekable<T>, indents: IndentSize) -> Vec<YamlEntry>
+fn parse_single<T, E>(
+    iterator: &mut Peekable<T>,
+    indents: IndentSize,
+) -> Result<Vec<YamlEntry>, String>
 where
-    T: Iterator<Item = String>,
+    T: Iterator<Item = Result<String, E>>,
+    E: std::fmt::Debug + Display,
 {
-    let (next, values) = parse_single_inner(iterator, indents);
+    let (next, values) = parse_single_inner(iterator, indents)?;
     if next {
         iterator.next();
     }
-    values
+    Ok(values)
 }
 
-fn parse_single_inner<T>(iterator: &mut Peekable<T>, indents: IndentSize) -> (bool, Vec<YamlEntry>)
+macro_rules! next_line {
+    ($iterator:expr) => {
+        match $iterator.peek() {
+            Some(line) => line,
+            None => return Err("Error reading file, unexpected EOF.".to_owned()),
+        }
+    };
+}
+
+fn parse_single_inner<T, E>(
+    iterator: &mut Peekable<T>,
+    indents: IndentSize,
+) -> Result<(bool, Vec<YamlEntry>), String>
 where
-    T: Iterator<Item = String>,
+    T: Iterator<Item = Result<String, E>>,
+    E: std::fmt::Debug + Display,
 {
     let mut next = true;
-    let line = iterator.peek().unwrap();
+    let line = match next_line!(iterator) {
+        Ok(line) => line,
+        Err(e) => return Err(e.to_string()),
+    };
     let mut entries = vec![];
 
-    let parts = line.split_once(':').unwrap();
+    let Some(parts) = line.split_once(':') else {
+        return Err(err_on_line!(line));
+    };
     let key = parts.0[(2 * indents).into()..].to_owned();
 
     // value might need to be an empty string. in that case, pass a space, and later change it back to empty
@@ -227,15 +279,21 @@ where
     match value {
         "" => {
             iterator.next();
-            let mut line = iterator.peek().unwrap();
+            let mut line = match next_line!(iterator) {
+                Ok(line) => line,
+                Err(e) => return Err(e.to_string()),
+            };
             let mut line_indents = count_indents(line);
             // definitely an entry
             if line_indents == indents + 1 {
                 let mut values = vec![];
                 while line_indents > indents {
-                    values.append(&mut parse_single_inner(iterator, indents + 1).1);
+                    values.append(&mut parse_single_inner(iterator, indents + 1)?.1);
                     iterator.next();
-                    line = iterator.peek().unwrap();
+                    line = match next_line!(iterator) {
+                        Ok(line) => line,
+                        Err(e) => return Err(e.to_string()),
+                    };
                     line_indents = count_indents(line);
                 }
 
@@ -247,16 +305,19 @@ where
             // definitely an array
             } else if line_indents == indents && line.trim_start().starts_with('-') {
                 let mut values = vec![];
-                while line.trim_start().starts_with('-') {
+                while line.trim_start().starts_with('-') && !line.starts_with("---") {
                     let mut inner_values = vec![];
                     loop {
-                        let mut parsed = parse_single_inner(iterator, indents + 1);
+                        let mut parsed = parse_single_inner(iterator, indents + 1)?;
                         inner_values.append(&mut parsed.1);
                         if parsed.0 {
                             iterator.next();
                         }
-                        line = iterator.peek().unwrap();
-                        if count_indents(line) == indents {
+                        line = match next_line!(iterator) {
+                            Ok(line) => line,
+                            Err(e) => return Err(e.to_string()),
+                        };
+                        if count_indents(line) <= indents {
                             break;
                         }
                     }
@@ -276,25 +337,27 @@ where
                 });
                 next = false;
             } else {
-                panic!("Not sure what the structure is. Line: \n{}", line)
+                return Err(err_on_line!(line));
             }
         }
         s if s.starts_with('{') => {
             let mut l = s.strip_prefix('{').unwrap().to_owned();
             while !l.ends_with('}') {
                 iterator.next();
-                let line = iterator.peek().unwrap();
+                let line = match next_line!(iterator) {
+                    Ok(line) => line,
+                    Err(e) => return Err(e.to_string()),
+                };
                 l += (" ".to_owned() + line.trim_start()).as_str();
             }
             l = l.strip_suffix('}').unwrap().to_owned();
-            let value = YamlValue::Object(
-                l.split(", ")
-                    .flat_map(|kvp| {
-                        let kvp = kvp.to_owned();
-                        parse_single_inner(&mut vec![kvp].into_iter().peekable(), 0).1
-                    })
-                    .collect(),
-            );
+
+            let mut values = vec![];
+            for kvp in l.split(", ") {
+                let kvp: Result<String, E> = Ok(kvp.to_owned());
+                values.append(&mut parse_single_inner(&mut vec![kvp].into_iter().peekable(), 0)?.1);
+            }
+            let value = YamlValue::Object(values);
             entries.push(YamlEntry { key, value });
         }
         s => {
@@ -315,5 +378,5 @@ where
             entries.push(YamlEntry { key, value });
         }
     }
-    (next, entries)
+    Ok((next, entries))
 }

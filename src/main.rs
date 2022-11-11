@@ -24,12 +24,11 @@ fn main() {
 
     let project = fs::find_project_files(&path).unwrap();
 
-    let uos = yaml_parser::parse(fs::get_file_lines(project.scenes.last().unwrap()).unwrap());
+    let path = project.scenes.last().unwrap();
+    let uos = yaml_parser::parse(fs::get_file_lines(path).unwrap()).unwrap();
     for uo in uos {
         println!("{}", uo);
     }
-
-    todo!("proper error handling")
 }
 
 fn print_usage() {
