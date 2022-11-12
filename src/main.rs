@@ -1,13 +1,14 @@
-use std::process::exit;
-
 mod args_parser;
 mod class_id;
 mod fs;
+mod ui;
 mod unity;
 mod util;
 mod yaml_parser;
 
-fn main() {
+fn main() -> std::io::Result<()> {
+    use std::process::exit;
+
     let path = match args_parser::parse() {
         Ok(path) => path,
         Err(e) => match e {
@@ -24,11 +25,18 @@ fn main() {
 
     let project = fs::find_project_files(&path).unwrap();
 
-    let path = project.scenes.last().unwrap();
-    let uos = yaml_parser::parse(fs::get_file_lines(path).unwrap()).unwrap();
-    for uo in uos {
-        println!("{}", uo);
+    // just shutting up the compiler's warnings about unused code
+    {
+        if let Some(file) = project.prefabs.first() {
+            if let Ok(lines) = fs::get_file_lines(file) {
+                let _parsed = yaml_parser::parse(lines);
+            }
+        }
     }
+
+    ui::run(project)?;
+
+    Ok(())
 }
 
 fn print_usage() {

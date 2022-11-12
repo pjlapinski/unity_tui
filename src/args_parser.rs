@@ -16,6 +16,6 @@ pub fn parse() -> Result<PathBuf, ArgsError> {
     if !path.is_dir() {
         Err(ArgsError::NotDir)
     } else {
-        Ok(PathBuf::from(path))
+        Ok(path)
     }
 }
