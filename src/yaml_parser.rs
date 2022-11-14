@@ -36,9 +36,6 @@ impl YamlValue {
             YamlValue::Int(i) => i.to_string(),
             YamlValue::Float(f) => f.to_string(),
             YamlValue::Str(s) => {
-                if s.starts_with("The small eye") {
-                    dbg!()
-                }
                 let mut lines = s.lines().peekable();
                 let mut line = lines.next();
                 if lines.peek().is_none() {
