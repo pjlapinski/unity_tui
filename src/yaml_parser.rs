@@ -1,5 +1,5 @@
-use crate::{class_id::ClassId, fs::FileLines};
-use std::{fmt::Display, iter::Peekable};
+use crate::{class_id::ClassId, fs, fs::FileLines};
+use std::{fmt::Display, iter::Peekable, path::Path};
 
 type IndentSize = u8;
 
@@ -35,7 +35,37 @@ impl YamlValue {
         match self {
             YamlValue::Int(i) => i.to_string(),
             YamlValue::Float(f) => f.to_string(),
-            YamlValue::Str(s) => s.to_string(),
+            YamlValue::Str(s) => {
+                if s.starts_with("The small eye") {
+                    dbg!()
+                }
+                let mut lines = s.lines().peekable();
+                let mut line = lines.next();
+                if lines.peek().is_none() {
+                    return s.to_string();
+                }
+                let mut single_quote = true;
+                let mut output = "".to_owned();
+                while line.is_some() {
+                    let content = line.unwrap();
+                    if single_quote && (content.contains("\\n") || content.contains("\\r")) {
+                        single_quote = false;
+                    }
+                    if output.is_empty() {
+                        output += content;
+                    } else {
+                        output +=
+                            ("\r\n".to_owned() + "  ".repeat(indent as usize).as_str() + content)
+                                .as_str();
+                    }
+                    line = lines.next();
+                }
+                if single_quote {
+                    format!("'{}'", output)
+                } else {
+                    format!("\"{}\"", output)
+                }
+            }
             YamlValue::Object(o) => {
                 let s = o
                     .iter()
@@ -86,21 +116,37 @@ impl YamlEntry {
     }
 
     pub fn to_indented_string(&self, indent: IndentSize) -> String {
-        format!(
-            "{}{}: {}",
-            Self::indent(indent),
-            self.key,
-            self.value.to_indented_string(indent + 1)
-        )
+        if self.key.is_empty() {
+            format!(
+                "{}{}",
+                Self::indent(indent),
+                self.value.to_indented_string(indent + 1)
+            )
+        } else {
+            format!(
+                "{}{}: {}",
+                Self::indent(indent),
+                self.key,
+                self.value.to_indented_string(indent + 1)
+            )
+        }
     }
 
     pub fn to_array_string(&self, indent: IndentSize) -> String {
-        format!(
-            "{}- {}: {}",
-            Self::indent(indent),
-            self.key,
-            self.value.to_indented_string(indent + 1)
-        )
+        if self.key.is_empty() {
+            format!(
+                "{}- {}",
+                Self::indent(indent),
+                self.value.to_indented_string(indent + 1)
+            )
+        } else {
+            format!(
+                "{}- {}: {}",
+                Self::indent(indent),
+                self.key,
+                self.value.to_indented_string(indent + 1)
+            )
+        }
     }
 }
 
@@ -143,6 +189,13 @@ macro_rules! err_on_line {
             $line, $extra
         )
     };
+}
+
+pub fn parse_file(path: &Path) -> Result<Vec<UnityObject>, String> {
+    match fs::get_file_lines(path) {
+        Ok(lines) => parse(lines),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 pub fn parse(text: FileLines) -> Result<Vec<UnityObject>, String> {
@@ -261,8 +314,13 @@ where
     };
     let mut entries = vec![];
 
-    let Some(parts) = line.split_once(':') else {
+    let Some(mut parts) = line.split_once(':') else {
         return Err(err_on_line!(line));
+    };
+    // special case, we are in an array and the value is an object
+    let (left, right) = line.split_at(2 * indents as usize);
+    if right.starts_with('{') && left.ends_with("- ") {
+        parts = (left, right);
     };
     let key = parts.0[(2 * indents).into()..].to_owned();
 
@@ -360,10 +418,38 @@ where
             let value = YamlValue::Object(values);
             entries.push(YamlEntry { key, value });
         }
+
+        s if s.starts_with('"') || s.starts_with('\'') => {
+            let quote = s.chars().next().unwrap();
+            let indents = count_indents(line);
+            let mut value = s.strip_prefix(quote).unwrap().to_owned();
+            while !value.ends_with(quote) {
+                iterator.next();
+                let line = match next_line!(iterator) {
+                    Ok(line) => line
+                        .as_str()
+                        .get((indents as usize + 3)..)
+                        .unwrap_or(line.as_str()),
+                    Err(e) => return Err(e.to_string()),
+                };
+                let join_symbol = match quote {
+                    '\'' => "\r\n".to_owned(),
+                    '"' => "\n".to_owned(),
+                    _ => {
+                        return Err(
+                            "Unknown string block beginning symbol. Expected \" or '".to_owned()
+                        )
+                    }
+                };
+                value += (join_symbol + line).as_str();
+            }
+            let value = YamlValue::Str(value.strip_suffix(quote).unwrap().to_owned());
+            entries.push(YamlEntry { key, value });
+        }
         s => {
             let value = if let Ok(i) = s.parse::<i64>() {
                 // in case of, for example, a Unity GUID with value 00000000000000000000000000000000
-                if s.len() != i.to_string().len() {
+                if s.len() != i.to_string().len() && s != "-0" {
                     YamlValue::Str(s.to_owned())
                 } else {
                     YamlValue::Int(i)
