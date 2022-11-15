@@ -4,10 +4,9 @@ mod fs;
 mod ui;
 mod unity;
 mod util;
-mod yaml_parser;
 
 fn main() -> std::io::Result<()> {
-    use std::process::exit;
+    use std::{io::stdout, panic, process::exit};
 
     let path = match args_parser::parse() {
         Ok(path) => path,
@@ -25,18 +24,16 @@ fn main() -> std::io::Result<()> {
 
     let project = fs::find_project_files(&path).unwrap();
 
-    // just shutting up the compiler's warnings about unused code
-    {
-        if let Some(file) = project.prefabs.first() {
-            if let Ok(lines) = fs::get_file_lines(file) {
-                let _parsed = yaml_parser::parse(lines);
-            }
+    panic::set_hook(Box::new({
+        let default = panic::take_hook();
+        move |payload| {
+            ui::cleanup_terminal(&mut stdout()).unwrap();
+            default(payload);
         }
-    }
+    }));
 
     ui::run(project)?;
-
-    Ok(())
+    ui::cleanup_terminal(&mut stdout())
 }
 
 fn print_usage() {

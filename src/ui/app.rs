@@ -1,4 +1,3 @@
-use super::Result;
 use crate::{
     fs::ProjectFiles,
     ui::screen::{self, Screen},
@@ -7,9 +6,14 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{io::stdout, time::Duration};
-use tui::backend::CrosstermBackend;
-use tui::{backend::Backend, Frame, Terminal};
+use std::{
+    io::{stdout, Error, ErrorKind, Stdout},
+    time::Duration,
+};
+use tui::{
+    backend::{Backend, CrosstermBackend},
+    Frame, Terminal,
+};
 
 pub struct AppState {
     pub project: ProjectFiles,
@@ -25,14 +29,15 @@ impl AppState {
         }
     }
 
-    pub fn handle_event(&mut self, event: &Event) {
+    pub fn handle_event(&mut self, event: &Event) -> Result<(), Error> {
         match self.active_screen {
             Screen::FileSelect(..) => screen::file_select::handle_event(event, self),
+            Screen::FileView(..) => screen::file_view::handle_event(event, self),
         }
     }
 }
 
-pub fn run(project: ProjectFiles) -> Result<()> {
+pub fn run(project: ProjectFiles) -> crossterm::Result<()> {
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = stdout();
 
@@ -44,14 +49,17 @@ pub fn run(project: ProjectFiles) -> Result<()> {
     let state = AppState::new(project);
     run_app(&mut terminal, state)?;
 
+    Ok(())
+}
+
+pub fn cleanup_terminal(stdout: &mut Stdout) -> crossterm::Result<()> {
     crossterm::terminal::disable_raw_mode()?;
-    crossterm::execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
+    crossterm::execute!(stdout, LeaveAlternateScreen, crossterm::cursor::Show)?;
 
     Ok(())
 }
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut state: AppState) -> Result<()> {
+fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut state: AppState) -> crossterm::Result<()> {
     loop {
         terminal.draw(|f| ui(f, &mut state))?;
 
@@ -68,11 +76,17 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut state: AppState) -> Resul
                     KeyEvent {
                         kind: KeyEventKind::Press,
                         ..
-                    } => state.handle_event(&event),
+                    } => {
+                        state
+                            .handle_event(&event)
+                            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+                    }
                     _ => {}
                 },
                 Event::Paste(_) => {
-                    state.handle_event(&event);
+                    state
+                        .handle_event(&event)
+                        .map_err(|e| Error::new(ErrorKind::Other, e))?;
                 }
                 _ => {}
             }
@@ -85,5 +99,6 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut state: AppState) -> Resul
 fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
     match &mut state.active_screen {
         Screen::FileSelect(..) => screen::file_select::ui(f, state),
+        Screen::FileView(..) => screen::file_view::ui(f, state),
     }
 }

@@ -1,9 +1,12 @@
-use crate::ui::screen::{get_available_size, render_footer, SelectNextPrev};
 use crate::{
     fs::{self, ProjectFiles},
-    ui::{app::AppState, screen::Screen},
+    ui::{
+        app::AppState,
+        screen::{AvailableSize, FooterRenderer, Screen, SelectNextPrev},
+    },
 };
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use std::io::Error;
 use std::path::{Path, PathBuf};
 use tui::{
     backend::Backend,
@@ -46,9 +49,11 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
         scenes_state,
         prefabs_state,
         assets_state,
-    }) = &mut state.active_screen;
+    }) = &mut state.active_screen else {
+        unreachable!()
+    };
 
-    let size = get_available_size(f);
+    let size = f.get_available_size();
     let footer_text: &str;
 
     if state.project.is_empty() {
@@ -101,7 +106,7 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
         footer_text = "shift+j/k/down/up: switch section  j/k/down/up: move  space/enter: select  ctrl+q: quit";
     }
 
-    render_footer(f, footer_text);
+    f.render_footer(footer_text);
 }
 
 fn project_files_item_list<'a>(
@@ -130,12 +135,14 @@ fn project_files_item_list<'a>(
         )
 }
 
-pub fn handle_event(event: &Event, state: &mut AppState) {
+pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {
     let Screen::FileSelect(FileSelectState {
         scenes_state,
         prefabs_state,
         assets_state,
-    }) = &mut state.active_screen;
+    }) = &mut state.active_screen else {
+        unreachable!()
+    };
 
     if let Event::Key(e) = event {
         match e {
@@ -203,6 +210,7 @@ pub fn handle_event(event: &Event, state: &mut AppState) {
             }
             KeyEvent {
                 code: KeyCode::Char('j') | KeyCode::Down,
+                modifiers: KeyModifiers::NONE,
                 ..
             } => {
                 scenes_state.next_if_some(state.project.scenes.len());
@@ -211,6 +219,7 @@ pub fn handle_event(event: &Event, state: &mut AppState) {
             }
             KeyEvent {
                 code: KeyCode::Char('k') | KeyCode::Up,
+                modifiers: KeyModifiers::NONE,
                 ..
             } => {
                 scenes_state.prev_if_some(state.project.scenes.len());
@@ -219,9 +228,24 @@ pub fn handle_event(event: &Event, state: &mut AppState) {
             }
             KeyEvent {
                 code: KeyCode::Enter | KeyCode::Char(' '),
+                modifiers: KeyModifiers::NONE,
                 ..
-            } => {}
+            } => {
+                let selected_file_path = {
+                    if let Some(idx) = scenes_state.selected() {
+                        state.project.scenes[idx].clone()
+                    } else if let Some(idx) = prefabs_state.selected() {
+                        state.project.prefabs[idx].clone()
+                    } else if let Some(idx) = assets_state.selected() {
+                        state.project.assets[idx].clone()
+                    } else {
+                        PathBuf::new()
+                    }
+                };
+                state.active_screen = Screen::new_file_view(selected_file_path)?;
+            }
             _ => {}
         }
     }
+    Ok(())
 }

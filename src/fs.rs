@@ -1,11 +1,8 @@
-use crate::util::ErrToStr;
+use crate::util::ErrTo;
 use std::{
-    fs::File,
-    io::{BufRead, BufReader, Error, Lines},
+    io::Error,
     path::{Path, PathBuf},
 };
-
-pub type FileLines = Lines<BufReader<File>>;
 
 const SCENE_EXTENSION: &str = "unity";
 const ASSET_EXTENSION: &str = "asset";
@@ -61,12 +58,6 @@ pub fn find_project_files(path: &Path) -> Result<ProjectFiles, Error> {
     }
 
     Ok(file_paths)
-}
-
-pub fn get_file_lines(path: &Path) -> Result<FileLines, Error> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    Ok(reader.lines())
 }
 
 #[allow(dead_code)]
