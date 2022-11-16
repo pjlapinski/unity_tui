@@ -6,6 +6,7 @@ use crate::{
     },
     util::hash_map,
 };
+use linked_hash_map::LinkedHashMap;
 use std::collections::{HashMap, HashSet};
 use unity_yaml_rust::{yaml::Hash, Yaml};
 
@@ -81,32 +82,32 @@ pub fn field_name_to_readable(name: &str) -> String {
         .to_owned()
 }
 
-pub fn construct_repository(yaml: Vec<YamlUnityDocument>) -> Repository {
-    let mut repo = hash_map![];
+pub fn construct_repository(yaml: Vec<YamlUnityDocument>) -> Option<Repository> {
+    let mut repo = LinkedHashMap::<Id, Object>::new();
     for doc in yaml.iter() {
         if let Some(class_name) = CLASS_IDS.get(&doc.class_id) {
             match *class_name {
                 "GameObject" => {
                     repo.insert(
                         doc.id.clone(),
-                        Object::GameObject(game_object_from_yaml(doc, class_name).unwrap()),
+                        Object::GameObject(game_object_from_yaml(doc, class_name)?),
                     );
                 }
                 // TODO: this does not account for built-in components, i.e. Camera
                 "MonoBehaviour" => {
                     repo.insert(
                         doc.id.clone(),
-                        Object::Component(Component::MonoBehaviour(
-                            monobehaviour_from_yaml(doc, class_name).unwrap(),
-                        )),
+                        Object::Component(Component::MonoBehaviour(monobehaviour_from_yaml(
+                            doc, class_name,
+                        )?)),
                     );
                 }
                 "Transform" | "RectTransform" => {
                     repo.insert(
                         doc.id.clone(),
-                        Object::Component(Component::Transform(
-                            transform_from_yaml(doc, class_name).unwrap(),
-                        )),
+                        Object::Component(Component::Transform(transform_from_yaml(
+                            doc, class_name,
+                        )?)),
                     );
                 }
                 _ => {} // TODO: other types of serialized entities, like RenderSettings
@@ -114,7 +115,7 @@ pub fn construct_repository(yaml: Vec<YamlUnityDocument>) -> Repository {
         }
     }
 
-    repo.into()
+    Some(repo.into())
 }
 
 fn game_object_from_yaml(doc: &YamlUnityDocument, class_name: &str) -> Option<GameObject> {
@@ -137,9 +138,9 @@ fn game_object_from_yaml(doc: &YamlUnityDocument, class_name: &str) -> Option<Ga
                 .unwrap()
                 .as_hash()
                 .unwrap();
-            map.get_from_str("fileID").unwrap().as_file_id().unwrap()
+            map.get_from_str("fileID")?.as_file_id()
         })
-        .collect();
+        .collect::<Option<Vec<Id>>>()?;
 
     Some(GameObject {
         id: doc.id.clone(),
@@ -228,6 +229,7 @@ fn transform_3d_from_yaml(doc: &YamlUnityDocument, class_name: &str) -> Option<T
     let local_rotation = helpers::obj_to_vec4(map.get_from_str("m_LocalRotation")?.as_hash()?)?;
     let local_position = helpers::obj_to_vec3(map.get_from_str("m_LocalPosition")?.as_hash()?)?;
     let local_scale = helpers::obj_to_vec3(map.get_from_str("m_LocalScale")?.as_hash()?)?;
+    let root_order = map.get_from_str("m_RootOrder")?.as_i64()?;
     let game_object_id = map
         .get_from_str("m_GameObject")?
         .as_hash()?
@@ -260,6 +262,7 @@ fn transform_3d_from_yaml(doc: &YamlUnityDocument, class_name: &str) -> Option<T
         local_rotation,
         local_position,
         local_scale,
+        root_order,
         father_id,
         children_ids,
         game_object_id,
@@ -278,6 +281,7 @@ fn rect_transform_from_yaml(doc: &YamlUnityDocument, class_name: &str) -> Option
         helpers::obj_to_vec2(map.get_from_str("m_AnchoredPosition")?.as_hash()?)?;
     let size_delta = helpers::obj_to_vec2(map.get_from_str("m_SizeDelta")?.as_hash()?)?;
     let pivot = helpers::obj_to_vec2(map.get_from_str("m_Pivot")?.as_hash()?)?;
+    let root_order = map.get_from_str("m_RootOrder")?.as_i64()?;
     let game_object_id = map
         .get_from_str("m_GameObject")?
         .as_hash()?
@@ -315,13 +319,14 @@ fn rect_transform_from_yaml(doc: &YamlUnityDocument, class_name: &str) -> Option
         anchored_position,
         size_delta,
         pivot,
+        root_order,
         father_id,
         children_ids,
         game_object_id,
     })
 }
 
-pub struct Repository(HashMap<Id, Object>);
+pub struct Repository(LinkedHashMap<Id, Object>);
 
 impl Repository {
     /// Returns all Ids that point to GameObjects
@@ -343,7 +348,7 @@ impl Repository {
                 Object::Component(Component::Transform(transform)) => Some(transform),
                 _ => None,
             })
-            .filter(|transform| transform.has_parent())
+            .filter(|transform| !transform.has_parent())
             .collect()
     }
 
@@ -384,8 +389,8 @@ impl Repository {
     }
 }
 
-impl From<HashMap<Id, Object>> for Repository {
-    fn from(map: HashMap<Id, Object>) -> Self {
+impl From<LinkedHashMap<Id, Object>> for Repository {
+    fn from(map: LinkedHashMap<Id, Object>) -> Self {
         Self(map)
     }
 }

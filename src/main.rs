@@ -22,7 +22,7 @@ fn main() -> std::io::Result<()> {
         },
     };
 
-    let project = fs::find_project_files(&path).unwrap();
+    let project = fs::find_project_files(&path)?;
 
     panic::set_hook(Box::new({
         let default = panic::take_hook();

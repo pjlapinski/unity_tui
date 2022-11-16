@@ -1,3 +1,4 @@
+use crate::ui::screen::bordered_list;
 use crate::{
     fs::{self, ProjectFiles},
     ui::{
@@ -125,14 +126,7 @@ fn project_files_item_list<'a>(
             ListItem::new(path).style(Style::reset())
         })
         .collect();
-    List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(title))
-        .highlight_style(
-            Style::default()
-                .bg(Color::White)
-                .fg(Color::Black)
-                .add_modifier(Modifier::ITALIC),
-        )
+    bordered_list(items, Some(title))
 }
 
 pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {

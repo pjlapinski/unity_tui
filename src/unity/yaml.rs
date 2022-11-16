@@ -57,7 +57,7 @@ pub fn parse_file(path: &Path) -> Result<Vec<YamlUnityDocument>, Error> {
     // BUG: document with negative Id cannot be parsed
     let (content, indices) = bugfix_remove_negative_ids(content);
 
-    let parsed = YamlLoader::load_from_str(&content).err_to_io_err().unwrap();
+    let parsed = YamlLoader::load_from_str(&content).err_to_io_err()?;
 
     let mut docs = vec![];
     for doc in parsed {

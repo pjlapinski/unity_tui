@@ -1,10 +1,15 @@
 pub mod file_select;
 pub mod file_view;
 
-use crate::ui::screen::file_select::FileSelectState;
-use crate::ui::screen::file_view::FileViewState;
-use tui::widgets::ListState;
-use tui::{backend::Backend, layout::Rect, Frame};
+use crate::ui::screen::{file_select::FileSelectState, file_view::FileViewState};
+use tui::{
+    backend::Backend,
+    layout::Rect,
+    style::{Color, Modifier, Style},
+    text::Spans,
+    widgets::{Block, Borders, List, ListItem, ListState},
+    Frame,
+};
 
 pub enum Screen {
     FileSelect(FileSelectState),
@@ -32,6 +37,23 @@ impl SelectNextPrev for ListState {
             self.select(Some(idx));
         }
     }
+}
+
+pub(self) fn bordered_list<'a, T, U>(items: T, title: Option<U>) -> List<'a>
+where
+    T: Into<Vec<ListItem<'a>>>,
+    U: Into<Spans<'a>>,
+{
+    let mut block = Block::default().borders(Borders::ALL);
+    if let Some(t) = title {
+        block = block.title(t);
+    }
+    List::new(items).block(block).highlight_style(
+        Style::default()
+            .bg(Color::White)
+            .fg(Color::Black)
+            .add_modifier(Modifier::ITALIC),
+    )
 }
 
 pub(self) trait AvailableSize<B: Backend> {

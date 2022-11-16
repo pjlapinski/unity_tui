@@ -214,6 +214,7 @@ version = "0.1.0"
 dependencies = [
  "crossterm",
  "lazy_static",
+ "linked-hash-map",
  "tui",
  "unity-yaml-rust",
 ]

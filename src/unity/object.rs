@@ -2,7 +2,7 @@ use super::{
     vector::{Quaternion, Vector2, Vector3, Vector4},
     Id,
 };
-use std::collections::HashMap;
+use std::{cmp::Ordering, collections::HashMap};
 use unity_yaml_rust::Yaml;
 
 pub trait GetId {
@@ -86,6 +86,7 @@ pub struct Transform3D {
     pub local_rotation: Quaternion,
     pub local_position: Vector3,
     pub local_scale: Vector3,
+    pub root_order: i64,
     pub father_id: Id,
     pub children_ids: Vec<Id>,
     pub game_object_id: Id,
@@ -108,6 +109,7 @@ pub struct RectTransform {
     pub anchored_position: Vector2,
     pub size_delta: Vector2,
     pub pivot: Vector2,
+    pub root_order: i64,
     pub father_id: Id,
     pub children_ids: Vec<Id>,
     pub game_object_id: Id,
@@ -158,6 +160,19 @@ impl Transform {
 
     pub fn has_parent(&self) -> bool {
         self.get_father_id() != "0"
+    }
+
+    pub fn get_root_order(&self) -> i64 {
+        match self {
+            Transform::Transform3D(t) => t.root_order,
+            Transform::RectTransform(t) => t.root_order,
+        }
+    }
+
+    pub fn partial_cmp_by_root_order(&self, other: &Transform) -> Ordering {
+        self.get_root_order()
+            .partial_cmp(&other.get_root_order())
+            .unwrap()
     }
 }
 
