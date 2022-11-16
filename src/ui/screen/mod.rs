@@ -1,7 +1,7 @@
 pub mod file_select;
 pub mod file_view;
 
-use crate::ui::screen::{file_select::FileSelectState, file_view::FileViewState};
+use crate::ui::screen::{file_select::FileSelectState, file_view::HierarchyViewState};
 use tui::{
     backend::Backend,
     layout::Rect,
@@ -13,7 +13,7 @@ use tui::{
 
 pub enum Screen {
     FileSelect(FileSelectState),
-    FileView(FileViewState),
+    HierarchyView(HierarchyViewState),
 }
 
 pub trait SelectNextPrev {

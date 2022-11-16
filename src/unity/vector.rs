@@ -29,8 +29,4 @@ where
 }
 
 pub type Vector3 = Vec3<f32>;
-#[allow(dead_code)]
-pub type Vector3Int = Vec3<i32>;
 pub type Vector2 = Vec2<f32>;
-#[allow(dead_code)]
-pub type Vector2Int = Vec2<i32>;

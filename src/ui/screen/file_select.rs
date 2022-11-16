@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    style::Style,
+    widgets::{List, ListItem, ListState, Paragraph},
     Frame,
 };
 
@@ -108,25 +108,6 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
     }
 
     f.render_footer(footer_text);
-}
-
-fn project_files_item_list<'a>(
-    files: &'a [PathBuf],
-    base_path: &'a Path,
-    title: &'a str,
-) -> List<'a> {
-    let items: Vec<ListItem> = files
-        .iter()
-        .map(|item| {
-            let path = fs::path_to_relative(item, base_path)
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_string();
-            ListItem::new(path).style(Style::reset())
-        })
-        .collect();
-    bordered_list(items, Some(title))
 }
 
 pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {
@@ -225,6 +206,7 @@ pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {
                 modifiers: KeyModifiers::NONE,
                 ..
             } => {
+                // TODO: create a different view for assets
                 let selected_file_path = {
                     if let Some(idx) = scenes_state.selected() {
                         state.project.scenes[idx].clone()
@@ -236,10 +218,29 @@ pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {
                         PathBuf::new()
                     }
                 };
-                state.active_screen = Screen::new_file_view(selected_file_path)?;
+                state.active_screen = Screen::new_hierarchy_view(selected_file_path)?;
             }
             _ => {}
         }
     }
     Ok(())
+}
+
+fn project_files_item_list<'a>(
+    files: &'a [PathBuf],
+    base_path: &'a Path,
+    title: &'a str,
+) -> List<'a> {
+    let items: Vec<ListItem> = files
+        .iter()
+        .map(|item| {
+            let path = fs::path_to_relative(item, base_path)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            ListItem::new(path).style(Style::reset())
+        })
+        .collect();
+    bordered_list(items, Some(title))
 }

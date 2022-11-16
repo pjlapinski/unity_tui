@@ -12,28 +12,59 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::{io::Error, path::PathBuf};
 use tui::{
     backend::Backend,
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState},
+    style::Style,
+    widgets::{List, ListItem, ListState},
     Frame,
 };
 
 use super::AvailableSize;
 
-pub struct FileViewState {
+pub struct HierarchyViewState {
     pub selected_file_path: PathBuf,
     pub objects_repository: unity::Repository,
     pub game_objects_list_state: ListState,
 }
 
 impl Screen {
-    pub fn new_file_view(path: PathBuf) -> Result<Self, Error> {
+    pub fn new_hierarchy_view(path: PathBuf) -> Result<Self, Error> {
         let repo = unity::construct_repository(yaml::parse_file(&path)?).unwrap();
-        Ok(Screen::FileView(FileViewState {
+        Ok(Screen::HierarchyView(HierarchyViewState {
             selected_file_path: path,
             objects_repository: repo,
             game_objects_list_state: ListState::default(),
         }))
     }
+}
+
+pub fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
+    let Screen::HierarchyView(view_state) = &mut state.active_screen else { unreachable!() };
+
+    let t = fs::path_to_relative(&view_state.selected_file_path, &state.project.base_path).unwrap();
+    let title = t.to_str().unwrap();
+    let list = create_hierarchy(view_state, title);
+
+    f.render_stateful_widget(
+        list,
+        f.get_available_size(),
+        &mut view_state.game_objects_list_state,
+    );
+
+    f.render_footer("esc: back  ctrl+q: quit")
+}
+
+pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {
+    if let Event::Key(e) = event {
+        #[allow(clippy::collapsible_match)]
+        match e {
+            KeyEvent {
+                code: KeyCode::Esc,
+                modifiers: KeyModifiers::NONE,
+                ..
+            } => state.active_screen = Screen::new_file_select(&state.project),
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn generate_game_object_names(
@@ -85,16 +116,12 @@ fn get_unparented(
         .collect()
 }
 
-pub fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
-    let Screen::FileView(FileViewState {
-                             selected_file_path,
-                             objects_repository,
+fn create_hierarchy<'a>(view_state: &mut HierarchyViewState, title: &'a str) -> List<'a> {
+    let HierarchyViewState {
+        objects_repository,
         game_objects_list_state,
-
-    }) = &mut state.active_screen else {
-        unreachable!()
-    };
-
+        ..
+    } = view_state;
     let unparented = get_unparented(objects_repository);
 
     let mut names = vec![];
@@ -109,27 +136,6 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
     if !list_items.is_empty() && game_objects_list_state.selected().is_none() {
         game_objects_list_state.select(Some(0));
     }
-    let t = fs::path_to_relative(selected_file_path, &state.project.base_path).unwrap();
-    let title = t.to_str().unwrap();
 
-    let list = bordered_list(list_items, Some(title));
-
-    f.render_stateful_widget(list, f.get_available_size(), game_objects_list_state);
-
-    f.render_footer("esc: back  ctrl+q: quit")
-}
-
-pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {
-    if let Event::Key(e) = event {
-        #[allow(clippy::collapsible_match)]
-        match e {
-            KeyEvent {
-                code: KeyCode::Esc,
-                modifiers: KeyModifiers::NONE,
-                ..
-            } => state.active_screen = Screen::new_file_select(&state.project),
-            _ => {}
-        }
-    }
-    Ok(())
+    bordered_list(list_items, Some(title))
 }

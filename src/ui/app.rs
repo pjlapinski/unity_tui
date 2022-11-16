@@ -32,7 +32,7 @@ impl AppState {
     pub fn handle_event(&mut self, event: &Event) -> Result<(), Error> {
         match self.active_screen {
             Screen::FileSelect(..) => screen::file_select::handle_event(event, self),
-            Screen::FileView(..) => screen::file_view::handle_event(event, self),
+            Screen::HierarchyView(..) => screen::file_view::handle_event(event, self),
         }
     }
 }
@@ -99,6 +99,6 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut state: AppState) -> cross
 fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
     match &mut state.active_screen {
         Screen::FileSelect(..) => screen::file_select::ui(f, state),
-        Screen::FileView(..) => screen::file_view::ui(f, state),
+        Screen::HierarchyView(..) => screen::file_view::ui(f, state),
     }
 }
