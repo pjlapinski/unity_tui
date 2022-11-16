@@ -54,7 +54,6 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
 
 pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {
     if let Event::Key(e) = event {
-        #[allow(clippy::collapsible_match)]
         match e {
             KeyEvent {
                 code: KeyCode::Esc,

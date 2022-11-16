@@ -13,7 +13,6 @@ macro_rules! hash_map {
         }};
 }
 
-#[allow(unused_macros)]
 macro_rules! hash_set {
     () => {
         std::collections::HashSet::new()
@@ -28,7 +27,6 @@ macro_rules! hash_set {
 }
 
 pub(crate) use hash_map;
-#[allow(unused_imports)]
 pub(crate) use hash_set;
 
 pub trait ErrTo<T, U> {

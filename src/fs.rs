@@ -60,14 +60,12 @@ pub fn find_project_files(path: &Path) -> Result<ProjectFiles, Error> {
     Ok(file_paths)
 }
 
-#[allow(dead_code)]
 pub fn path_to_relative(full: &Path, base: &Path) -> Result<PathBuf, String> {
     full.strip_prefix(base)
         .map(|p| p.to_path_buf())
         .err_to_str()
 }
 
-#[allow(dead_code)]
 pub fn path_to_absolute(relative: &Path, base: &Path) -> PathBuf {
     base.join(relative)
 }
