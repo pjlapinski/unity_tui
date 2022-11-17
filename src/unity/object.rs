@@ -2,6 +2,7 @@ use super::{
     vector::{Quaternion, Vector2, Vector3, Vector4},
     Id,
 };
+use crate::class_id::CLASS_IDS;
 use std::{cmp::Ordering, collections::HashMap};
 use unity_yaml_rust::Yaml;
 
@@ -72,6 +73,13 @@ impl GetId for Component {
 }
 
 impl Component {
+    pub fn get_name(&self) -> String {
+        match self {
+            Component::MonoBehaviour(m) => m.id.clone(), // TODO: change this to component name, needs to be read from the meta file
+            Component::Transform(t) => t.get_name(),
+        }
+    }
+
     pub fn get_game_object_id(&self) -> &Id {
         match self {
             Component::MonoBehaviour(m) => &m.game_object_id,
@@ -137,6 +145,13 @@ impl GetId for Transform {
 }
 
 impl Transform {
+    pub fn get_name(&self) -> String {
+        match self {
+            Transform::Transform3D(_) => "Transform".to_owned(),
+            Transform::RectTransform(_) => "RectTransform".to_owned(),
+        }
+    }
+
     pub fn get_children_ids(&self) -> &Vec<Id> {
         match self {
             Transform::Transform3D(t) => &t.children_ids,

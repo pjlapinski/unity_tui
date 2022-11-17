@@ -1,18 +1,19 @@
-use crate::ui::screen::bordered_list;
+use crate::ui::screen::SelectNextPrev;
 use crate::{
     fs,
     ui::{
         app::AppState,
-        screen::{FooterRenderer, Screen},
+        screen::{bordered_list, FooterRenderer, Screen},
     },
-    unity::{self, yaml},
+    unity::{self, yaml, Id},
     util::PairWith,
 };
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::{io::Error, path::PathBuf};
 use tui::{
     backend::Backend,
-    style::Style,
+    layout::{Constraint, Direction, Layout},
+    style::{Color, Style},
     widgets::{List, ListItem, ListState},
     Frame,
 };
@@ -23,6 +24,10 @@ pub struct HierarchyViewState {
     pub selected_file_path: PathBuf,
     pub objects_repository: unity::Repository,
     pub game_objects_list_state: ListState,
+    pub components_list_state: ListState,
+    pub component_selected: bool,
+    pub game_objects_list_len: usize,
+    pub components_list_len: usize,
 }
 
 impl Screen {
@@ -32,6 +37,10 @@ impl Screen {
             selected_file_path: path,
             objects_repository: repo,
             game_objects_list_state: ListState::default(),
+            components_list_state: ListState::default(),
+            component_selected: false,
+            game_objects_list_len: 0,
+            components_list_len: 0,
         }))
     }
 }
@@ -39,44 +48,138 @@ impl Screen {
 pub fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
     let Screen::HierarchyView(view_state) = &mut state.active_screen else { unreachable!() };
 
-    let t = fs::path_to_relative(&view_state.selected_file_path, &state.project.base_path).unwrap();
-    let title = t.to_str().unwrap();
-    let list = create_hierarchy(view_state, title);
+    let size = f.get_available_size();
 
-    f.render_stateful_widget(
-        list,
-        f.get_available_size(),
-        &mut view_state.game_objects_list_state,
-    );
+    let mut named_list = vec![];
+    {
+        let unparented = get_unparented(&view_state.objects_repository);
+        for (game_object, transform) in unparented {
+            named_list.append(
+                &mut generate_game_object_named_list(
+                    game_object,
+                    transform,
+                    0,
+                    &view_state.objects_repository,
+                )
+                .unwrap(),
+            );
+        }
+    }
 
-    f.render_footer("esc: back  ctrl+q: quit")
+    let layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .split(size);
+
+    {
+        let t =
+            fs::path_to_relative(&view_state.selected_file_path, &state.project.base_path).unwrap();
+        let title = t.to_str().unwrap();
+        let list = create_hierarchy_view(&named_list, title);
+
+        if !named_list.is_empty() && view_state.game_objects_list_state.selected().is_none() {
+            view_state.game_objects_list_state.select(Some(0));
+        }
+        view_state.game_objects_list_len = named_list.len();
+
+        f.render_stateful_widget(list, layout[0], &mut view_state.game_objects_list_state);
+    }
+
+    {
+        let selected = view_state.game_objects_list_state.selected().unwrap();
+        let selected_game_object = named_list[selected].1;
+        let list_items = get_components_list_items(view_state, selected_game_object);
+        view_state.components_list_len = list_items.len();
+        let list = bordered_list(list_items, Some(selected_game_object.name.clone()));
+
+        f.render_stateful_widget(list, layout[1], &mut view_state.components_list_state);
+    }
+
+    if view_state.component_selected {
+        f.render_footer("j/k/down/up: move  esc: hierarchy  ctrl+q: quit")
+    } else {
+        f.render_footer("j/k/down/up: move  space/enter: select  esc: select file  ctrl+q: quit")
+    }
 }
 
 pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {
+    let Screen::HierarchyView(view_state) = &mut state.active_screen else { unreachable!() };
+
     if let Event::Key(e) = event {
         match e {
             KeyEvent {
                 code: KeyCode::Esc,
                 modifiers: KeyModifiers::NONE,
                 ..
-            } => state.active_screen = Screen::new_file_select(&state.project),
+            } => {
+                if view_state.component_selected {
+                    view_state.component_selected = false;
+                    view_state.components_list_state.select(None);
+                } else {
+                    state.active_screen = Screen::new_file_select(&state.project);
+                }
+            }
+            KeyEvent {
+                code: KeyCode::Enter | KeyCode::Char(' '),
+                modifiers: KeyModifiers::NONE,
+                ..
+            } => {
+                if view_state.component_selected {
+                } else {
+                    view_state.component_selected = true;
+                    view_state.components_list_state.select(Some(0));
+                }
+            }
+            KeyEvent {
+                code: KeyCode::Char('j') | KeyCode::Down,
+                modifiers: KeyModifiers::NONE,
+                ..
+            } => {
+                if view_state.component_selected {
+                    view_state
+                        .components_list_state
+                        .next_if_some(view_state.components_list_len);
+                } else {
+                    view_state
+                        .game_objects_list_state
+                        .next_if_some(view_state.game_objects_list_len);
+                }
+            }
+            KeyEvent {
+                code: KeyCode::Char('k') | KeyCode::Up,
+                modifiers: KeyModifiers::NONE,
+                ..
+            } => {
+                if view_state.component_selected {
+                    view_state
+                        .components_list_state
+                        .prev_if_some(view_state.components_list_len);
+                } else {
+                    view_state
+                        .game_objects_list_state
+                        .prev_if_some(view_state.game_objects_list_len);
+                }
+            }
             _ => {}
         }
     }
     Ok(())
 }
 
-fn generate_game_object_names(
-    game_object: &unity::GameObject,
+fn generate_game_object_named_list<'a>(
+    game_object: &'a unity::GameObject,
     transform: &unity::Transform,
     indent: usize,
-    objects_repository: &unity::Repository,
-) -> Option<Vec<String>> {
-    let mut names = vec![];
-    names.push(if indent == 0 {
-        game_object.name.clone()
+    objects_repository: &'a unity::Repository,
+) -> Option<Vec<(String, &'a unity::GameObject)>> {
+    let mut out = vec![];
+    out.push(if indent == 0 {
+        (game_object.name.clone(), game_object)
     } else {
-        format!("{}└{}", " ".repeat(indent - 1), &game_object.name)
+        (
+            format!("{}└{}", " ".repeat(indent - 1), &game_object.name),
+            game_object,
+        )
     });
 
     let mut children = transform
@@ -88,7 +191,7 @@ fn generate_game_object_names(
 
     for child in children {
         let go = objects_repository.get_game_object(child.get_game_object_id())?;
-        names.append(&mut generate_game_object_names(
+        out.append(&mut generate_game_object_named_list(
             go,
             child,
             indent + 1,
@@ -96,7 +199,7 @@ fn generate_game_object_names(
         )?);
     }
 
-    Some(names)
+    Some(out)
 }
 
 fn get_unparented(
@@ -115,26 +218,56 @@ fn get_unparented(
         .collect()
 }
 
-fn create_hierarchy<'a>(view_state: &mut HierarchyViewState, title: &'a str) -> List<'a> {
-    let HierarchyViewState {
-        objects_repository,
-        game_objects_list_state,
-        ..
-    } = view_state;
-    let unparented = get_unparented(objects_repository);
-
+fn create_hierarchy_view<'a>(
+    game_object_named_list: &[(String, &unity::GameObject)],
+    title: &'a str,
+) -> List<'a> {
     let mut names = vec![];
-    for (go, trans) in unparented {
-        names.append(&mut generate_game_object_names(go, trans, 0, objects_repository).unwrap());
+    for (name, _go) in game_object_named_list.iter() {
+        names.push(name);
     }
     let list_items: Vec<ListItem> = names
-        .iter()
+        .into_iter()
         .map(|name| ListItem::new(name.clone()).style(Style::reset()))
         .collect();
 
-    if !list_items.is_empty() && game_objects_list_state.selected().is_none() {
-        game_objects_list_state.select(Some(0));
-    }
-
     bordered_list(list_items, Some(title))
+}
+
+fn get_components_list_items<'a>(
+    view_state: &HierarchyViewState,
+    selected_game_object: &unity::GameObject,
+) -> Vec<ListItem<'a>> {
+    // let components: Option<Vec<&unity::Component>> = selected_game_object
+    //     .component_ids
+    //     .iter()
+    //     .map(|id| objects_repository.get_component(id))
+    //     .collect();
+    // TODO: because some components are skipped for now, repository returns None for them. When this is fixed, replace next lines with the ones above
+    let components: Option<Vec<&unity::Component>> = selected_game_object
+        .component_ids
+        .iter()
+        .filter_map(|id| view_state.objects_repository.get_component(id))
+        .map(Some)
+        .collect();
+    if let Some(components) = components {
+        components
+            .iter()
+            .map(|comp| {
+                let name = comp.get_name();
+                let mut enabled = true;
+                if let unity::Component::MonoBehaviour(mono) = comp {
+                    enabled = mono.enabled;
+                }
+
+                ListItem::new(name).style(if enabled {
+                    Style::reset()
+                } else {
+                    Style::reset().fg(Color::Gray)
+                })
+            })
+            .collect()
+    } else {
+        vec![]
+    }
 }
