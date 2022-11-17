@@ -1,7 +1,7 @@
 pub mod file_select;
-pub mod file_view;
+pub mod hierarchy_view;
 
-use crate::ui::screen::{file_select::FileSelectState, file_view::HierarchyViewState};
+use crate::ui::screen::{file_select::FileSelectState, hierarchy_view::HierarchyViewState};
 use tui::{
     backend::Backend,
     layout::Rect,
