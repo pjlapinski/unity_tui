@@ -1,6 +1,7 @@
 use crate::{
     fs::ProjectFiles,
     ui::screen::{self, Screen},
+    unity::repository::{construct_meta_repository, MetaFilesRepository},
 };
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
@@ -18,14 +19,17 @@ use tui::{
 pub struct AppState {
     pub project: ProjectFiles,
     pub active_screen: Screen,
+    pub meta_files_repository: MetaFilesRepository,
 }
 
 impl AppState {
     pub fn new(project: ProjectFiles) -> Self {
+        let meta_files_repository = construct_meta_repository(&project).unwrap();
         let active_screen = Screen::new_file_select(&project);
         Self {
             project,
             active_screen,
+            meta_files_repository,
         }
     }
 

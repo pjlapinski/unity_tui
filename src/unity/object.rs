@@ -2,7 +2,8 @@ use super::{
     vector::{Quaternion, Vector2, Vector3, Vector4},
     Id,
 };
-use crate::class_id::CLASS_IDS;
+use crate::unity::repository::MetaFilesRepository;
+use crate::unity::Guid;
 use std::{cmp::Ordering, collections::HashMap};
 use unity_yaml_rust::Yaml;
 
@@ -49,6 +50,7 @@ pub struct MonoBehaviour {
     pub enabled: bool,
     pub fields: HashMap<String, Field>,
     pub game_object_id: Id,
+    pub script_guid: Guid,
 }
 
 impl GetId for MonoBehaviour {
@@ -73,10 +75,11 @@ impl GetId for Component {
 }
 
 impl Component {
-    pub fn get_name(&self) -> String {
+    /// Returns None for components that do not have the name stored in them, for example MonoBehaviours
+    pub fn get_name(&self, meta_files: &MetaFilesRepository) -> Option<String> {
         match self {
-            Component::MonoBehaviour(m) => m.id.clone(), // TODO: change this to component name, needs to be read from the meta file
-            Component::Transform(t) => t.get_name(),
+            Component::MonoBehaviour(m) => meta_files.get(&m.script_guid).cloned(),
+            Component::Transform(t) => Some(t.get_name()),
         }
     }
 

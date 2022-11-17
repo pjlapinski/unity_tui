@@ -1,11 +1,11 @@
-use crate::ui::screen::SelectNextPrev;
+use crate::unity::repository::MetaFilesRepository;
 use crate::{
     fs,
     ui::{
         app::AppState,
-        screen::{bordered_list, FooterRenderer, Screen},
+        screen::{bordered_list, FooterRenderer, Screen, SelectNextPrev},
     },
-    unity::{self, yaml, Id},
+    unity::{self, yaml},
     util::PairWith,
 };
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
@@ -88,7 +88,11 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
     {
         let selected = view_state.game_objects_list_state.selected().unwrap();
         let selected_game_object = named_list[selected].1;
-        let list_items = get_components_list_items(view_state, selected_game_object);
+        let list_items = get_components_list_items(
+            &state.meta_files_repository,
+            view_state,
+            selected_game_object,
+        );
         view_state.components_list_len = list_items.len();
         let list = bordered_list(list_items, Some(selected_game_object.name.clone()));
 
@@ -235,6 +239,7 @@ fn create_hierarchy_view<'a>(
 }
 
 fn get_components_list_items<'a>(
+    meta_files_repository: &MetaFilesRepository,
     view_state: &HierarchyViewState,
     selected_game_object: &unity::GameObject,
 ) -> Vec<ListItem<'a>> {
@@ -254,7 +259,9 @@ fn get_components_list_items<'a>(
         components
             .iter()
             .map(|comp| {
-                let name = comp.get_name();
+                let name = comp
+                    .get_name(meta_files_repository)
+                    .unwrap_or_else(|| "<Unrecognized Component>".to_owned()); // TODO: This should probably disappear when all components are implemented, look into it if not
                 let mut enabled = true;
                 if let unity::Component::MonoBehaviour(mono) = comp {
                     enabled = mono.enabled;

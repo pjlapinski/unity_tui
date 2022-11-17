@@ -5,6 +5,7 @@ pub mod vector;
 pub mod yaml;
 
 pub type Id = String;
+pub type Guid = String;
 
 pub use converters::field_name_to_readable;
 pub use object::{

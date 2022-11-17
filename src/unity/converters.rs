@@ -1,4 +1,4 @@
-use crate::unity::Id;
+use crate::unity::{Guid, Id};
 use unity_yaml_rust::{yaml::Hash, Yaml};
 
 pub fn field_name_to_readable(name: &str) -> String {
@@ -12,17 +12,17 @@ pub fn field_name_to_readable(name: &str) -> String {
 
     name.chars()
         .fold(String::new(), |acc, ch| {
-            if acc.is_empty() {
+            if acc.is_empty() && ch != '<' {
                 acc + ch.to_uppercase().to_string().as_str()
+            } else if acc.is_empty() && ch == '<' {
+                // for <name>k__BackingField
+                acc
             } else if ch == '_' {
                 acc + " "
             } else if (ch.is_uppercase() && acc.chars().last().unwrap().is_lowercase())
                 || (ch.is_numeric() && !acc.chars().last().unwrap().is_numeric())
             {
                 acc + " " + ch.to_string().as_str()
-            } else if ch == '<' {
-                // for <name>k__BackingField
-                acc
             } else if acc.chars().last().unwrap().is_whitespace() {
                 acc + ch.to_uppercase().to_string().as_str()
             } else {
@@ -31,6 +31,20 @@ pub fn field_name_to_readable(name: &str) -> String {
         })
         .trim_end()
         .to_owned()
+}
+
+pub trait AsGuid {
+    fn as_guid(&self) -> Option<Guid>;
+}
+
+impl AsGuid for Yaml {
+    fn as_guid(&self) -> Option<Id> {
+        match self {
+            Yaml::Integer(i) => Some(i.to_string()),
+            Yaml::String(s) => Some(s.clone()),
+            _ => None,
+        }
+    }
 }
 
 pub trait AsFileId {

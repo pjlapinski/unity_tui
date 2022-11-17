@@ -1,5 +1,7 @@
+use crate::unity::converters::AsGuid;
 use crate::{
     class_id::CLASS_IDS,
+    fs::ProjectFiles,
     unity::{
         converters::{
             helpers::{obj_to_vec2, obj_to_vec3, obj_to_vec4},
@@ -7,15 +9,32 @@ use crate::{
         },
         object::Field,
         yaml::YamlUnityDocument,
-        Component, GameObject, Id, MonoBehaviour, Object, RectTransform, Transform, Transform3D,
+        Component, GameObject, Guid, Id, MonoBehaviour, Object, RectTransform, Transform,
+        Transform3D,
     },
     util::hash_map,
 };
 use linked_hash_map::LinkedHashMap;
-use std::collections::HashSet;
+use std::{
+    collections::{HashMap, HashSet},
+    io::Read,
+};
 use unity_yaml_rust::Yaml;
 
 pub struct Repository(LinkedHashMap<Id, Object>);
+pub struct MetaFilesRepository(HashMap<Guid, String>);
+
+impl MetaFilesRepository {
+    pub fn get(&self, guid: &Guid) -> Option<&String> {
+        self.0.get(guid)
+    }
+}
+
+impl From<HashMap<Guid, String>> for MetaFilesRepository {
+    fn from(map: HashMap<Guid, String>) -> Self {
+        Self(map)
+    }
+}
 
 impl Repository {
     /// Returns all Ids that point to GameObjects
@@ -82,6 +101,27 @@ impl From<LinkedHashMap<Id, Object>> for Repository {
     fn from(map: LinkedHashMap<Id, Object>) -> Self {
         Self(map)
     }
+}
+
+pub fn construct_meta_repository(project: &ProjectFiles) -> Option<MetaFilesRepository> {
+    println!("Loading project, please wait...");
+    let mut repo = hash_map![];
+
+    for path in project.meta_files.iter() {
+        let name = path.file_name()?.to_str()?.split('.').next()?.to_owned();
+
+        let mut file = std::fs::File::open(path).ok()?;
+        let mut content = String::new();
+        file.read_to_string(&mut content).ok()?;
+        let parsed = unity_yaml_rust::YamlLoader::load_from_str(&content).ok()?;
+        assert_eq!(parsed.len(), 1);
+
+        let Yaml::Hash(map) = &parsed[0] else { return None; };
+        let Yaml::String(guid) = map.get_from_str("guid")?.clone() else { return None; };
+        repo.insert(guid, name);
+    }
+
+    Some(repo.into())
 }
 
 pub fn construct_repository(yaml: Vec<YamlUnityDocument>) -> Option<Repository> {
@@ -166,6 +206,7 @@ fn monobehaviour_from_yaml(doc: &YamlUnityDocument, class_name: &str) -> Option<
         enabled: false,
         fields: hash_map![],
         game_object_id: "".to_string(),
+        script_guid: "".to_string(),
     };
 
     for (key, value) in map.iter() {
@@ -174,6 +215,9 @@ fn monobehaviour_from_yaml(doc: &YamlUnityDocument, class_name: &str) -> Option<
             "m_Enabled" => comp.enabled = value.as_i64()? > 0,
             "m_GameObject" => {
                 comp.game_object_id = value.as_hash()?.get_from_str("fileID")?.as_file_id()?
+            }
+            "m_Script" => {
+                comp.script_guid = value.as_hash()?.get_from_str("guid")?.as_guid()?;
             }
             LAST_COMMON_MONO_FIELD_NAME => past_common = true,
             _ if past_common => match value {

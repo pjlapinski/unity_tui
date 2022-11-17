@@ -7,6 +7,7 @@ use std::{
 const SCENE_EXTENSION: &str = "unity";
 const ASSET_EXTENSION: &str = "asset";
 const PREFAB_EXTENSION: &str = "prefab";
+const META_EXTENSION: &str = "meta";
 
 #[derive(Debug)]
 pub struct ProjectFiles {
@@ -14,6 +15,7 @@ pub struct ProjectFiles {
     pub scenes: Vec<PathBuf>,
     pub assets: Vec<PathBuf>,
     pub prefabs: Vec<PathBuf>,
+    pub meta_files: Vec<PathBuf>,
 }
 
 impl ProjectFiles {
@@ -23,6 +25,7 @@ impl ProjectFiles {
             scenes: vec![],
             assets: vec![],
             prefabs: vec![],
+            meta_files: vec![],
         }
     }
 
@@ -30,6 +33,7 @@ impl ProjectFiles {
         self.scenes.append(&mut other.scenes);
         self.assets.append(&mut other.assets);
         self.prefabs.append(&mut other.prefabs);
+        self.meta_files.append(&mut other.meta_files);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -49,6 +53,7 @@ pub fn find_project_files(path: &Path) -> Result<ProjectFiles, Error> {
                     SCENE_EXTENSION => file_paths.scenes.push(path),
                     ASSET_EXTENSION => file_paths.assets.push(path),
                     PREFAB_EXTENSION => file_paths.prefabs.push(path),
+                    META_EXTENSION => file_paths.meta_files.push(path),
                     _ => {}
                 }
             }
