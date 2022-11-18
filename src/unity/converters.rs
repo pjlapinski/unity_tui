@@ -2,13 +2,9 @@ use crate::unity::{Guid, Id};
 use unity_yaml_rust::{yaml::Hash, Yaml};
 
 pub fn field_name_to_readable(name: &str) -> String {
-    let name = name
-        .strip_prefix("m_")
-        .unwrap_or(name)
-        .strip_prefix('_')
-        .unwrap_or(name)
-        .strip_suffix(">k__BackingField")
-        .unwrap_or(name);
+    let name = name.strip_prefix("m_").unwrap_or(name);
+    let name = name.strip_prefix('_').unwrap_or(name);
+    let name = name.strip_suffix(">k__BackingField").unwrap_or(name);
 
     name.chars()
         .fold(String::new(), |acc, ch| {
