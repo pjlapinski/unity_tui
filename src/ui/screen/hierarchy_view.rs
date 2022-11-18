@@ -95,6 +95,9 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, state: &mut AppState) {
 
     let list_items: Vec<ListItem> =
         if let HierarchyViewBlocksState::Component = view_state.blocks_state {
+            if view_state.fields_list_state.selected().is_none() {
+                view_state.fields_list_state.select(Some(0));
+            }
             if let Some(selected_component_idx) = view_state.components_list_state.selected() {
                 let selected_component = components[selected_component_idx];
                 let fields = get_components_fields(selected_component);
@@ -209,7 +212,11 @@ pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {
                         .components_list_state
                         .next_if_some(view_state.components_list_len);
                 }
-                HierarchyViewBlocksState::Component => {}
+                HierarchyViewBlocksState::Component => {
+                    view_state
+                        .fields_list_state
+                        .next_if_some(view_state.fields_list_len);
+                }
             },
             KeyEvent {
                 code: KeyCode::Char('k') | KeyCode::Up,
@@ -226,7 +233,11 @@ pub fn handle_event(event: &Event, state: &mut AppState) -> Result<(), Error> {
                         .components_list_state
                         .prev_if_some(view_state.components_list_len);
                 }
-                HierarchyViewBlocksState::Component => {}
+                HierarchyViewBlocksState::Component => {
+                    view_state
+                        .fields_list_state
+                        .prev_if_some(view_state.fields_list_len);
+                }
             },
             _ => {}
         }
